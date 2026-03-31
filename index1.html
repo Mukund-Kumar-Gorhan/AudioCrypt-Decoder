@@ -1,0 +1,711 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>AudioCrypt Decoder | Reveal Hidden Messages</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', 'Segoe UI', system-ui, -apple-system, 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            min-height: 100vh;
+            padding: clamp(16px, 5vw, 40px);
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: radial-gradient(circle at 75% 30%, rgba(255,255,255,0.05) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 950px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+        }
+
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 5px rgba(102, 126, 234, 0.3); }
+            50% { box-shadow: 0 0 20px rgba(102, 126, 234, 0.6); }
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            border-radius: clamp(24px, 6vw, 40px);
+            padding: clamp(24px, 6vw, 40px);
+            margin-bottom: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.4);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: clamp(24px, 6vw, 36px);
+        }
+
+        .icon-wrapper {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            width: clamp(70px, 15vw, 90px);
+            height: clamp(70px, 15vw, 90px);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            animation: float 3s ease-in-out infinite, glow 2s ease-in-out infinite;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+
+        .icon-wrapper span {
+            font-size: clamp(36px, 8vw, 48px);
+        }
+
+        h2 {
+            font-size: clamp(26px, 7vw, 36px);
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .subtitle {
+            color: #6b7280;
+            font-size: clamp(12px, 4vw, 15px);
+            margin-top: 10px;
+        }
+
+        .upload-area {
+            border: 3px dashed #e5e7eb;
+            border-radius: clamp(20px, 5vw, 32px);
+            padding: clamp(40px, 8vw, 70px) clamp(20px, 5vw, 40px);
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            margin: 20px 0;
+            background: linear-gradient(135deg, #fafafa 0%, #ffffff 100%);
+        }
+
+        .upload-area:hover {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+            transform: scale(1.01);
+        }
+
+        .upload-area.drag-over {
+            border-color: #22c55e;
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: clamp(48px, 12vw, 72px);
+            margin-bottom: 16px;
+        }
+
+        .upload-text {
+            font-size: clamp(16px, 5vw, 20px);
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 8px;
+        }
+
+        .upload-hint {
+            font-size: clamp(11px, 3.5vw, 13px);
+            color: #9ca3af;
+        }
+
+        .message-output {
+            background: linear-gradient(135deg, #f9fafb 0%, #ffffff 100%);
+            border-radius: clamp(20px, 5vw, 28px);
+            padding: clamp(20px, 5vw, 28px);
+            min-height: 200px;
+            margin: 24px 0;
+            font-family: 'Fira Code', 'JetBrains Mono', monospace;
+            border: 1px solid #f0f0f0;
+            transition: all 0.3s ease;
+        }
+
+        .revealed {
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+            border-left: 5px solid #22c55e;
+            padding: clamp(16px, 4vw, 24px);
+            border-radius: 20px;
+            animation: reveal 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes reveal {
+            from {
+                opacity: 0;
+                transform: translateY(30px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .status-card {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            padding: clamp(14px, 4vw, 18px) clamp(18px, 5vw, 24px);
+            border-radius: clamp(16px, 4vw, 24px);
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-left: 4px solid #667eea;
+            transition: all 0.3s ease;
+            flex-wrap: wrap;
+        }
+
+        .status-card span:first-child {
+            font-size: clamp(20px, 5vw, 24px);
+        }
+
+        .status-card span:last-child {
+            flex: 1;
+            font-size: clamp(12px, 3.5vw, 14px);
+            color: #1e293b;
+        }
+
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: clamp(12px, 3vw, 20px);
+            justify-content: center;
+            margin: 24px 0 16px;
+        }
+
+        .btn-primary, .btn-secondary {
+            padding: clamp(10px, 3.5vw, 14px) clamp(24px, 6vw, 36px);
+            border-radius: 60px;
+            font-size: clamp(13px, 4vw, 15px);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: #f1f5f9;
+            color: #334155;
+            border: 1px solid #e2e8f0;
+        }
+
+        .btn-secondary:hover {
+            background: #e2e8f0;
+            transform: translateY(-2px);
+        }
+
+        .history-item {
+            background: white;
+            border: 1px solid #f0f0f0;
+            border-radius: clamp(16px, 4vw, 20px);
+            padding: clamp(12px, 3.5vw, 16px);
+            margin: 12px 0;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .history-item:hover {
+            transform: translateX(6px);
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+
+        .progress {
+            background: #e5e7eb;
+            border-radius: 50px;
+            height: 8px;
+            margin: 15px 0;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 50px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: shimmer 1.5s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .badge {
+            background: #22c55e20;
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-size: clamp(11px, 3.5vw, 12px);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 16px;
+            color: #166534;
+            font-weight: 500;
+        }
+
+        .footer {
+            text-align: center;
+            color: rgba(255,255,255,0.6);
+            font-size: clamp(11px, 3.5vw, 13px);
+            margin-top: 30px;
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+
+        /* Loading Animation */
+        .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .btn-group button {
+                flex: 1;
+                justify-content: center;
+            }
+            
+            .upload-area {
+                padding: 40px 20px;
+            }
+            
+            .history-item {
+                flex-direction: column;
+            }
+        }
+
+        /* Empty State */
+        .empty-state {
+            color: #9ca3af;
+            text-align: center;
+            padding: clamp(30px, 8vw, 50px);
+            font-size: clamp(13px, 4vw, 14px);
+        }
+
+        /* Section Header */
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .section-header h3 {
+            font-size: clamp(18px, 5vw, 22px);
+            color: #374151;
+            font-weight: 600;
+        }
+        
+        .section-header span {
+            font-size: 24px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <div class="icon-wrapper">
+                    <span>🎧</span>
+                </div>
+                <h2>AudioCrypt Decoder</h2>
+                <div class="subtitle">Extract hidden messages from sound waves</div>
+            </div>
+            
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📂</div>
+                <div class="upload-text">Drop audio file here</div>
+                <div class="upload-hint">or click to browse</div>
+                <div class="upload-hint" style="margin-top: 12px;">🎵 Supports .wav files</div>
+                <input type="file" id="fileInput" accept=".wav" style="display: none;">
+            </div>
+            
+            <div class="progress" id="progress" style="display: none;">
+                <div id="progressBar" class="progress-bar"></div>
+            </div>
+            
+            <div id="status" class="status-card">
+                <span>💡</span>
+                <span>Ready to decode — upload a .wav file generated by AudioCrypt Encoder</span>
+            </div>
+            
+            <div id="messageOutput" class="message-output">
+                <div class="empty-state">
+                    🔐 <strong>Upload an audio file</strong><br>
+                    <span style="font-size: 12px;">to reveal the hidden message</span>
+                </div>
+            </div>
+            
+            <div class="btn-group">
+                <button class="btn-secondary" onclick="clearOutput()">
+                    🗑️ Clear
+                </button>
+                <button class="btn-secondary" onclick="exportData()">
+                    📤 Export Message
+                </button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="section-header">
+                <span>📜</span>
+                <h3>Decoding History</h3>
+            </div>
+            <div id="history">
+                <div class="empty-state">
+                    No files decoded yet
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            🔓 Your secrets are safe | Instant decoding from audio files | 1000Hz = 0, 2000Hz = 1
+        </div>
+    </div>
+
+    <script>
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    
+    uploadArea.addEventListener('click', () => fileInput.click());
+    
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('drag-over');
+    });
+    
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('drag-over');
+    });
+    
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file && (file.name.endsWith('.wav') || file.type === 'audio/wav')) {
+            decodeAudio(file);
+        } else {
+            showStatus('❌ Please upload a .wav file', 'error');
+        }
+    });
+    
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files[0]) {
+            decodeAudio(e.target.files[0]);
+        }
+    });
+    
+    async function decodeAudio(file) {
+        showStatus('🔍 Processing audio file...', 'info');
+        document.getElementById('messageOutput').innerHTML = '<div class="empty-state"><div class="spinner" style="margin: 0 auto 12px;"></div>🔄 Decoding audio data...</div>';
+        document.getElementById('progress').style.display = 'block';
+        document.getElementById('progressBar').style.width = '0%';
+        
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            const audioData = audioBuffer.getChannelData(0);
+            const sampleRate = audioBuffer.sampleRate;
+            const duration = audioBuffer.duration;
+            
+            showStatus(`📊 Audio loaded: ${duration.toFixed(1)} sec, ${sampleRate} Hz`, 'info');
+            
+            const BIT_DURATION = 1.0;
+            const windowSize = Math.floor(sampleRate * BIT_DURATION);
+            const startOffset = Math.floor(sampleRate * 2.0);
+            
+            let bits = [];
+            let position = startOffset;
+            let step = 0;
+            
+            while (position + windowSize < audioData.length) {
+                const window = audioData.slice(position, position + windowSize);
+                const energy1k = goertzel(window, 1000, sampleRate);
+                const energy2k = goertzel(window, 2000, sampleRate);
+                
+                if (energy2k > 0.08 && energy2k > energy1k * 1.5) {
+                    bits.push(1);
+                } else if (energy1k > 0.08 && energy1k > energy2k * 1.5) {
+                    bits.push(0);
+                } else {
+                    break;
+                }
+                
+                position += windowSize + Math.floor(sampleRate * 0.05);
+                step++;
+                
+                const progress = Math.min(100, (position / audioData.length) * 100);
+                document.getElementById('progressBar').style.width = progress + '%';
+            }
+            
+            showStatus(`📡 Detected ${bits.length} bits`, 'info');
+            
+            let message = '';
+            let byte = 0;
+            let validChars = 0;
+            
+            for (let i = 0; i < bits.length; i++) {
+                byte = (byte << 1) | bits[i];
+                if ((i + 1) % 8 === 0) {
+                    if (byte >= 32 && byte <= 126) {
+                        message += String.fromCharCode(byte);
+                        validChars++;
+                    } else if (byte === 10 || byte === 13) {
+                        message += '\n';
+                    }
+                    byte = 0;
+                }
+            }
+            
+            document.getElementById('progress').style.display = 'none';
+            
+            if (message && message.length > 2 && validChars > 2) {
+                displayMessage(message, file.name);
+                addToHistory(message, file.name);
+                showStatus(`✅ Successfully decoded: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`, 'success');
+            } else {
+                throw new Error(`No valid message found (${validChars} valid chars from ${bits.length} bits)`);
+            }
+            
+        } catch (error) {
+            document.getElementById('progress').style.display = 'none';
+            console.error('Decoding error:', error);
+            showStatus('❌ Could not decode this file', 'error');
+            document.getElementById('messageOutput').innerHTML = `
+                <div class="empty-state" style="color: #ef4444;">
+                    ❌ <strong>Could not decode this file</strong><br>
+                    <span style="font-size: 12px; color: #9ca3af;">Make sure it's a valid AudioCrypt encoded file (generated by the encoder)</span>
+                    <div style="margin-top: 16px; font-size: 11px; color: #6b7280;">💡 Tip: Generate a fresh audio file with the encoder first</div>
+                </div>
+            `;
+        }
+    }
+    
+    function goertzel(samples, targetFreq, sampleRate) {
+        const N = samples.length;
+        const k = Math.round(targetFreq * N / sampleRate);
+        const omega = (2 * Math.PI * k) / N;
+        const coeff = 2 * Math.cos(omega);
+        
+        let sPrev = 0, sPrev2 = 0;
+        for (let i = 0; i < N; i++) {
+            const s = samples[i] + coeff * sPrev - sPrev2;
+            sPrev2 = sPrev;
+            sPrev = s;
+        }
+        
+        const power = sPrev2 * sPrev2 + sPrev * sPrev - coeff * sPrev * sPrev2;
+        return Math.sqrt(power) / N;
+    }
+    
+    function displayMessage(message, filename) {
+        const outputDiv = document.getElementById('messageOutput');
+        
+        let badge = '';
+        const sensitivePatterns = ['PASSWORD', 'EMAIL', 'CREDIT', 'SECRET', 'API_KEY', 'LOCATION', 'WIFI'];
+        const hasSensitive = sensitivePatterns.some(p => message.toUpperCase().includes(p));
+        
+        if (hasSensitive) {
+            badge = '<div class="badge">🔐 Sensitive Data Detected ⚠️</div>';
+        }
+        
+        outputDiv.innerHTML = `<div class="revealed">
+            ${badge}
+            <div style="font-size: clamp(11px, 3.5vw, 12px); color: #6b7280; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <span>📄 ${filename}</span>
+                <span>🕒 ${new Date().toLocaleTimeString()}</span>
+            </div>
+            <div style="background: white; padding: clamp(16px, 4vw, 24px); border-radius: 20px; font-family: 'Fira Code', monospace; font-size: clamp(13px, 4vw, 16px); word-break: break-all; line-height: 1.6; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                ${escapeHtml(message)}
+            </div>
+        </div>`;
+    }
+    
+    function addToHistory(message, filename) {
+        const historyDiv = document.getElementById('history');
+        const timestamp = new Date().toLocaleString();
+        
+        if (historyDiv.children[0] && historyDiv.children[0].innerText.includes('No files decoded')) {
+            historyDiv.innerHTML = '';
+        }
+        
+        const item = document.createElement('div');
+        item.className = 'history-item';
+        const preview = message.length > 70 ? message.substring(0, 70) + '...' : message;
+        
+        item.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; color: #1f2937; font-size: clamp(12px, 3.5vw, 14px);">📁 ${filename}</div>
+                    <div style="font-size: 10px; color: #6b7280; margin-top: 4px;">🕒 ${timestamp}</div>
+                </div>
+                <div style="background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); padding: 4px 12px; border-radius: 30px; font-size: 11px; font-weight: 500;">✅ Decoded</div>
+            </div>
+            <div style="margin-top: 12px; font-size: clamp(11px, 3.5vw, 12px); color: #4b5563; font-family: monospace; background: #f9fafb; padding: 10px; border-radius: 12px;">
+                "${escapeHtml(preview)}"
+            </div>
+        `;
+        
+        item.onclick = () => {
+            displayMessage(message, filename);
+            document.getElementById('messageOutput').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            showStatus('📖 Loaded from history', 'info');
+        };
+        
+        historyDiv.insertBefore(item, historyDiv.firstChild);
+        
+        while (historyDiv.children.length > 8) {
+            historyDiv.removeChild(historyDiv.lastChild);
+        }
+    }
+    
+    function clearOutput() {
+        document.getElementById('messageOutput').innerHTML = '<div class="empty-state">🔐 <strong>Upload an audio file</strong><br><span style="font-size: 12px;">to reveal the hidden message</span></div>';
+        showStatus('🗑️ Cleared', 'info');
+    }
+    
+    function exportData() {
+        const outputDiv = document.getElementById('messageOutput');
+        const messageElement = outputDiv.querySelector('.revealed div:last-child');
+        
+        if (messageElement) {
+            const message = messageElement.innerText;
+            if (message && !message.includes('Upload')) {
+                const blob = new Blob([message], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `decoded_message_${Date.now()}.txt`;
+                a.click();
+                URL.revokeObjectURL(url);
+                showStatus('📤 Message exported successfully!', 'success');
+            } else {
+                showStatus('❌ Nothing to export', 'error');
+            }
+        } else {
+            showStatus('❌ No message to export', 'error');
+        }
+    }
+    
+    function showStatus(msg, type) {
+        const statusDiv = document.getElementById('status');
+        const icon = type === 'error' ? '❌' : type === 'success' ? '✅' : '💡';
+        statusDiv.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
+        
+        if (type === 'error') {
+            statusDiv.style.background = 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)';
+            statusDiv.style.borderLeftColor = '#ef4444';
+        } else if (type === 'success') {
+            statusDiv.style.background = 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)';
+            statusDiv.style.borderLeftColor = '#22c55e';
+        } else {
+            statusDiv.style.background = 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)';
+            statusDiv.style.borderLeftColor = '#667eea';
+        }
+        
+        setTimeout(() => {
+            if (document.getElementById('status').innerHTML === `<span>${icon}</span><span>${msg}</span>`) {
+                statusDiv.style.background = 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)';
+                statusDiv.style.borderLeftColor = '#667eea';
+            }
+        }, 3000);
+    }
+    
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    </script>
+</body>
+</html>
